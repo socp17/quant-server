@@ -2,6 +2,10 @@ import db from '../../db';
 import _, { head, tail } from 'lodash';
 import moment from 'moment';
 
+const latest = (rows, date) => _(rows)
+  .filter(row => date - row.date >= 0)
+  .minBy(row => date - row.date)
+
 export const doc = `
   Graph type: 'scatter'
   Required props: 'x', 'y'
@@ -36,7 +40,6 @@ export const post = (req, res) => {
   const { x, y, z } = body;
   const start = body.start;
   const end = body.end || moment().endOf('day').format('x');
-  console.log(start, end);
   const tables = _([x, y, z])
     .filter(x => x)
     .map(key => key.split('.')[0])
@@ -75,39 +78,32 @@ export const post = (req, res) => {
     .filter(row => row.x !== 'N/A')
     .filter(row => row.y !== 'N/A')
     .filter(row => row.z !== 'N/A')
+    .groupBy('ticker')
     .value();
 
-  const latest = (rows, date) => _(rows)
-    .filter(row => date - row.date >= 0)
-    .minBy(row => date - row.date)
-
-  if (start && end) {
+  if (z && start && end) {
     data = _(data)
-      .groupBy('ticker')
       .map(rows => {
         const s = latest(rows, start) || _.first(rows)
-        const e = latest(rows, end)
+        const e = latest(rows, end) || _.last(rows)
         return {
           ...e,
           z: (e.z - s.z) / s.z * 100,
         };
       })
-      .map(row => _.omit(row, 'date'))
-      .value();
   } else {
     data = _(data)
-      .groupBy('ticker')
       .map(rows => latest(rows, end))
-      .map(row => _.omit(row, 'date'))
-      .value();
   }
+
+  data = data
+    .map(row => _.omit(row, 'date'))
+    .value();
 
   const xs = _.map(data, 'x');
   const ys = _.map(data, 'y');
   const zs = _.map(data, 'z');
   const tickers = _.map(data, 'ticker');
-
-  throw new Error('newop')
 
   res.json({
     tickers,
